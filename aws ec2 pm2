@@ -1,0 +1,66 @@
+rm -rf web1
+rm web_backup_20250826.zip
+
+zip -r web_backup_$(date +%Y%m%d).zip web
+
+mv web web1
+
+scp -i "D:\epic_app\EpicApp_Ai_Video.pem" "D:\epic_app\web.zip" ubuntu@54.172.4.37:~/Epic_AI_Video/
+
+unzip web.zip -d .
+
+
+rm -rf node_modules
+
+
+pm2 start npm --name "epic-backend" -- run serve
+
+pm2 delete epic-backend
+pm2 start npm --name "epic-backend" -- run serve
+cd frontend
+
+
+==============================file delete from ============================
+
+sudo apt update
+sudo apt install -y dos2unix
+
+
+dos2unix keep.txt
+sed -i 's/[ \t\r]*$//' keep.txt
+
+
+tr -d '\r' < keep.txt > keep_fixed.txt && mv keep_fixed.txt keep.txt
+sed -i 's/[ \t\r]*$//' keep.txt
+
+
+
+
+aws s3 ls s3://epicappaivideos/uploads/ --recursive | awk '{print $4}' > all_files.txt
+comm -23 <(sort all_files.txt) <(sort keep.txt) > to_delete.txt
+
+echo "============== Would Delete =============="
+cat to_delete.txt
+
+
+while read key; do
+  echo "Deleting: $key"
+  aws s3 rm "s3://epicappaivideos/$key"
+done < to_delete.txt
+
+
+This will:
+
+Loop over each line in to_delete.txt
+
+Print the file being deleted (so you can monitor)
+
+Actually remove it from s3://epicappaivideos/uploads/
+
+
+
+wc -l to_delete.txt
+
+
+
+grep -f keep.txt to_delete.txt
