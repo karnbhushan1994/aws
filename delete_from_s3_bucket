@@ -1,0 +1,106 @@
+Great ✅ let’s make you a **safe one-click cleanup script**.
+This script will:
+
+1. Normalize `keep.txt` (so hidden `\r` or spaces don’t break matches).
+2. Generate `all_files.txt` (everything in S3).
+3. Generate `to_delete.txt` (everything NOT in `keep.txt`).
+4. Show you a summary.
+5. Ask for confirmation before deleting.
+6. Delete files one by one with logging.
+
+---
+
+### 📄 Create the Script
+
+On your EC2, run:
+
+```bash
+nano cleanup.sh
+```
+
+Paste this in:
+
+```bash
+#!/bin/bash
+set -e
+
+BUCKET="epicappaivideos"
+PREFIX="uploads/"
+
+echo "🔹 Normalizing keep.txt..."
+# Strip CRLF and trailing spaces
+tr -d '\r' < keep.txt | sed 's/[ \t]*$//' > keep_normalized.txt
+mv keep_normalized.txt keep.txt
+
+echo "🔹 Fetching all files from bucket..."
+aws s3 ls s3://$BUCKET/$PREFIX --recursive | awk '{print $4}' | sort > all_files.txt
+
+echo "🔹 Computing delete list..."
+sort keep.txt > keep_sorted.txt
+comm -23 all_files.txt keep_sorted.txt > to_delete.txt
+
+COUNT=$(wc -l < to_delete.txt)
+
+echo ""
+echo "============== SUMMARY =============="
+echo "Total files in S3   : $(wc -l < all_files.txt)"
+echo "Files to KEEP       : $(wc -l < keep.txt)"
+echo "Files to DELETE     : $COUNT"
+echo "====================================="
+echo ""
+
+if [ $COUNT -eq 0 ]; then
+  echo "✅ Nothing to delete. Exiting."
+  exit 0
+fi
+
+echo "⚠️ These files will be deleted:"
+head -n 20 to_delete.txt
+if [ $COUNT -gt 20 ]; then
+  echo "... (showing first 20 of $COUNT)"
+fi
+echo ""
+
+read -p "Do you want to proceed with deletion? (yes/no): " confirm
+if [ "$confirm" != "yes" ]; then
+  echo "❌ Aborting. No files deleted."
+  exit 0
+fi
+
+echo "🚀 Deleting files..."
+while read key; do
+  echo "Deleting: $key"
+  aws s3 rm "s3://$BUCKET/$key"
+done < to_delete.txt
+
+echo "✅ Cleanup complete. Whitelist files are safe."
+```
+
+---
+
+### 🚀 Run It
+
+1. Make it executable:
+
+   ```bash
+   chmod +x cleanup.sh
+   ```
+
+2. Run it:
+
+   ```bash
+   ./cleanup.sh
+   ```
+
+---
+
+### 🛡️ Safety Features
+
+* **Keeps whitelist safe** (checked with `comm`).
+* **Preview mode** shows how many will be deleted + first 20 files.
+* **Confirmation prompt** — nothing happens unless you type `yes`.
+* **Recoverable** — since versioning is enabled, you can undo by removing delete markers.
+
+---
+
+👉 Do you want me to also add an **auto-restore step** (in case a keep.txt file ever gets accidentally deleted, the script will automatically recover its latest version before cleanup)?
